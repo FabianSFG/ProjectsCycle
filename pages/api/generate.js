@@ -138,11 +138,14 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Server error: CLAUDE_API_KEY is not configured in the environment variables." });
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({
+    apiKey, baseURL: "https://api.anthropic.com",
+    defaultHeaders: { 'anthropic-version': '2023-06-01' }
+  });
 
   try {
     const message = await client.messages.create({
-      model: "claude-opus-4-7",
+      model: "claude-3-5-sonnet-20240620",
       max_tokens: 8192,
       thinking: { type: "adaptive" },
       system: SYSTEM_PROMPT,
