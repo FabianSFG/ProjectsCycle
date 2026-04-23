@@ -9,7 +9,6 @@ Use this exact structure:
 
 {
   "summary": "2-3 sentence executive summary",
-
   "epics": [
     {
       "name": "Epic name",
@@ -25,24 +24,21 @@ Use this exact structure:
       ]
     }
   ],
-
   "architecture": {
     "stack": ["Next.js", "Node.js", "PostgreSQL"],
     "description": "Short description of the overall architecture"
   },
-
   "ai_architecture": {
     "components": [
       {
         "name": "Component name",
         "role": "What it does in the system",
-        "model": "claude-opus-4-7 | claude-haiku-4-5 | embedding model | etc"
+        "model": "claude-3-5-sonnet | embedding model | etc"
       }
     ],
     "data_flow": "Step-by-step description of how data flows through the AI layer",
     "description": "How Claude and AI are used to power this product"
   },
-
   "team": [
     {
       "role": "Frontend Developer",
@@ -52,7 +48,6 @@ Use this exact structure:
       "tools": ["VS Code", "Figma", "GitHub Copilot"]
     }
   ],
-
   "tools": [
     {
       "name": "Tool name",
@@ -61,7 +56,6 @@ Use this exact structure:
       "purpose": "What this tool does for the project"
     }
   ],
-
   "estimation": {
     "total_hours": 0,
     "breakdown": [
@@ -71,7 +65,6 @@ Use this exact structure:
       }
     ]
   },
-
   "vibe_coding": {
     "time_saved_percent": 40,
     "dev_savings_percent": 30,
@@ -80,7 +73,6 @@ Use this exact structure:
       "Specific optimization or automation Claude enables in this project"
     ]
   },
-
   "comparison": {
     "traditional": {
       "hours": 0,
@@ -100,13 +92,11 @@ Use this exact structure:
       "percent": 0
     }
   },
-
   "totals": {
     "team_total_cost": 0,
     "tools_monthly_cost": 0,
     "grand_total": 0
   },
-
   "timeline": "8-10 weeks",
   "cost": 0
 }
@@ -132,28 +122,35 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Please provide a project idea." });
   }
 
-  // Best practice: Read and trim API keys inside the handler to prevent cold-start Netlify bugs & trailing spaces 
   const apiKey = (process.env.CLAUDE_API_KEY || "").trim();
   if (!apiKey) {
-    return res.status(500).json({ error: "Server error: CLAUDE_API_KEY is not configured in the environment variables." });
+    return res.status(500).json({ error: "Server error: CLAUDE_API_KEY is not configured." });
   }
 
+  // Inicialización limpia para producción
   const client = new Anthropic({
-    apiKey, baseURL: "https://api.anthropic.com",
-    defaultHeaders: { 'anthropic-version': '2023-06-01' }
+    apiKey,
+    baseURL: "https://api.anthropic.com"
   });
 
   try {
     const message = await client.messages.create({
-      model: "claude-3-5-sonnet-latest",
+      model: "claude-3-5-sonnet-20241022", // Modelo estable para producción
       max_tokens: 8192,
-      thinking: { type: "adaptive" },
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: `Idea: ${idea.trim()}` }],
     });
 
     const text = message.content.find((b) => b.type === "text")?.text ?? "";
-    const parsed = JSON.parse(text);
+
+    // Validamos que el texto sea JSON antes de parsear
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      console.error("JSON Parse Error:", text);
+      return res.status(500).json({ error: "Model returned invalid JSON format." });
+    }
 
     if (supabase) {
       const { error: dbError } = await supabase.from("projects").insert({
@@ -169,18 +166,15 @@ export default async function handler(req, res) {
 
       if (dbError) {
         console.error("Supabase insert error:", dbError);
-        // You can choose to throw or return an error here, but for now we log it.
-      } else {
-        console.log("Successfully saved project to Supabase!");
       }
     }
 
     return res.status(200).json(parsed);
   } catch (err) {
-    if (err instanceof SyntaxError) {
-      return res.status(500).json({ error: "Model returned invalid JSON. Try again." });
-    }
-    console.error(err);
-    return res.status(500).json({ error: err.message ?? "Internal server error." });
+    console.error("Anthropic API Error:", err);
+    return res.status(500).json({
+      error: err.message || "Internal server error.",
+      details: err.type || "Unknown Error"
+    });
   }
 }
