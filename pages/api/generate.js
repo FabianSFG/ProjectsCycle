@@ -122,8 +122,6 @@ Rules:
 - cost = totals.grand_total
 - All numbers must be consistent and calculated correctly`;
 
-const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -134,11 +132,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Please provide a project idea." });
   }
 
+  // Best practice: Read and trim API keys inside the handler to prevent cold-start Netlify bugs & trailing spaces 
+  const apiKey = (process.env.CLAUDE_API_KEY || "").trim();
+  if (!apiKey) {
+    return res.status(500).json({ error: "Server error: CLAUDE_API_KEY is not configured in the environment variables." });
+  }
+
+  const client = new Anthropic({ apiKey });
+
   try {
     const message = await client.messages.create({
-      model: "claude-opus-4-7",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 8192,
-      thinking: { type: "adaptive" },
+      thinking: { type: "adaptive", budget_tokens: 2048 },
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: `Idea: ${idea.trim()}` }],
     });
